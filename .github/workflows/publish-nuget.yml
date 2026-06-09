@@ -84,16 +84,25 @@ jobs:
       - name: Get NuGet trusted publishing token
         id: oidc
         run: |
-          TOKEN=$(curl -s -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=nuget:publish" | jq -r '.value')
+          RESPONSE=$(curl -s \
+            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=nuget:publish")
+          echo "Response: $RESPONSE"
+          TOKEN=$(echo "$RESPONSE" | jq -r '.value')
+          if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
+            echo "::error::Failed to obtain OIDC token"
+            exit 1
+          fi
           echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
 
       - name: Push to NuGet
-        run: >
-          dotnet nuget push "./artifacts/*.nupkg"
-          --api-key "${{ steps.oidc.outputs.token }}"
-          --source "$NUGET_FEED"
-          --skip-duplicate
+        run: |
+          for pkg in ./artifacts/*.nupkg; do
+            dotnet nuget push "$pkg" \
+              --api-key "${{ steps.oidc.outputs.token }}" \
+              --source "$NUGET_FEED" \
+              --skip-duplicate
+          done
 
       - name: Upload packages as build artifact
         if: always()
