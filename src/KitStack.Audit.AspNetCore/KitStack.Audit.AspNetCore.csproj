@@ -1,0 +1,40 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>KitStack.Audit.AspNetCore</PackageId>
+    <Authors>ghaith100994</Authors>
+    <Company>KitStack</Company>
+
+    <Description>ASP.NET Core wiring for KitStack.Audit: one-call setup, sink selection, narration, and health checks.</Description>
+    <PackageTags>kitstack audit audit-trail aspnetcore dependency-injection health-checks</PackageTags>
+    <RepositoryUrl>https://github.com/ghaith100994/KitStack.Audit</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/ghaith100994/KitStack.Audit</PackageProjectUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\KitStack.Audit.Abstractions\KitStack.Audit.Abstractions.csproj" />
+    <ProjectReference Include="..\KitStack.Audit.EntityFrameworkCore\KitStack.Audit.EntityFrameworkCore.csproj" />
+    <ProjectReference Include="..\KitStack.Audit.Sinks.EntityFrameworkCore\KitStack.Audit.Sinks.EntityFrameworkCore.csproj" />
+    <ProjectReference Include="..\KitStack.Audit.Sinks.Mongo\KitStack.Audit.Sinks.Mongo.csproj" />
+    <ProjectReference Include="..\KitStack.Audit.Fakes\KitStack.Audit.Fakes.csproj" />
+  </ItemGroup>
+
+  <!-- Versions resolved centrally via Directory.Packages.props -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" />
+  </ItemGroup>
+
+</Project>

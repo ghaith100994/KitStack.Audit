@@ -1,13 +1,12 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <!-- Package metadata -->
-    <PackageId>KitStack.Audit.Abstractions</PackageId>
+    <PackageId>KitStack.Audit.Fakes</PackageId>
     <Authors>ghaith100994</Authors>
     <Company>KitStack</Company>
 
-    <Description>Lightweight audit-trail interfaces, models and utilities for KitStack.Audit.</Description>
-    <PackageTags>kitstack audit audit-trail abstractions models utilities</PackageTags>
+    <Description>In-memory audit sink and test doubles for KitStack.Audit. Use in tests and local development.</Description>
+    <PackageTags>kitstack audit audit-trail fakes testing in-memory</PackageTags>
     <RepositoryUrl>https://github.com/ghaith100994/KitStack.Audit</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
@@ -19,6 +18,12 @@
     <None Include="README.md" Pack="true" PackagePath="" />
   </ItemGroup>
 
-  <!-- Intentionally no package references: abstractions stay dependency-free. -->
+  <ItemGroup>
+    <ProjectReference Include="..\KitStack.Audit.Abstractions\KitStack.Audit.Abstractions.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </ItemGroup>
 
 </Project>

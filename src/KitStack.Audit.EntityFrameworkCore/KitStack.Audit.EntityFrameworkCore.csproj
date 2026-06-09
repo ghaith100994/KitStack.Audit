@@ -1,0 +1,33 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Package metadata -->
+    <PackageId>KitStack.Audit.Sinks.EntityFrameworkCore</PackageId>
+    <Authors>ghaith100994</Authors>
+    <Company>KitStack</Company>
+
+    <Description>Relational (EF Core) audit-trail sink for KitStack.Audit. Persists trails to any EF Core relational provider.</Description>
+    <PackageTags>kitstack audit audit-trail sink efcore entity-framework-core sqlserver postgres</PackageTags>
+    <RepositoryUrl>https://github.com/ghaith100994/KitStack.Audit</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/ghaith100994/KitStack.Audit</PackageProjectUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\KitStack.Audit.Abstractions\KitStack.Audit.Abstractions.csproj" />
+  </ItemGroup>
+
+  <!-- Versions resolved centrally via Directory.Packages.props.
+       This package stays provider-agnostic: the consumer supplies UseSqlServer/UseNpgsql/etc. -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </ItemGroup>
+
+</Project>
