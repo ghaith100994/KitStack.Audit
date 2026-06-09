@@ -7,7 +7,7 @@ namespace KitStack.Audit.Abstractions.Attributes;
 /// Derive from this attribute to create module-specific definitions.
 /// </summary>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = true)]
-public sealed class AuditDefinitionAttribute : Attribute
+public class AuditDefinitionAttribute : Attribute
 {
     public AuditDefinitionAttribute(
         string module,
