@@ -74,6 +74,7 @@ jobs:
           -p:PackageVersion=${{ steps.version.outputs.version }}
           -p:IncludeSymbols=true
           -p:SymbolPackageFormat=snupkg
+          -m:1
       - name: Push to NuGet
         run: >
           dotnet nuget push "./artifacts/*.nupkg"
