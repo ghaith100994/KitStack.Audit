@@ -92,7 +92,7 @@ public static class AuditServiceCollectionExtensions
                 if (string.IsNullOrWhiteSpace(db.ConnectionString) || string.IsNullOrWhiteSpace(db.DatabaseName))
                     throw new InvalidOperationException(
                         "Audit:Sink is 'mongo' but Audit:Database:ConnectionString / DatabaseName are not configured.");
-                services.AddKitStackAuditMongoSink(db.ConnectionString!, db.DatabaseName!, db.CollectionName ?? "AuditTrails");
+                services.AddKitStackAuditMongoSink(db.ConnectionString!, db.DatabaseName!);
                 break;
 
             case "fake":
