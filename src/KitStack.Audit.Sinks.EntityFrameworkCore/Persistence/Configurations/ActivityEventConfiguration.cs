@@ -22,7 +22,12 @@ public sealed class ActivityEventConfiguration : IEntityTypeConfiguration<Activi
         builder.Property(x => x.EntityType).HasMaxLength(256);
         builder.Property(x => x.EntityId).HasMaxLength(128);
         builder.Property(x => x.Module).HasMaxLength(128);
-        builder.Property(x => x.Title).HasMaxLength(512);
+        builder.Property(x => x.TitleEn).HasMaxLength(512);
+        builder.Property(x => x.TitleAr).HasMaxLength(512);
+        builder.Property(x => x.SubtitleEn).HasMaxLength(512);
+        builder.Property(x => x.SubtitleAr).HasMaxLength(512);
+        builder.Property(x => x.Icon).HasMaxLength(256);
+        builder.Property(x => x.Severity).HasMaxLength(64);
 
         var converter = new ValueConverter<IDictionary<string, string>?, string?>(
             v => v == null ? null : JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),

@@ -14,11 +14,12 @@ public class ActivityEvent
     public string? EntityId { get; set; }
     public TrailType Action { get; set; }
 
-    /// <summary>Short, human-readable summary (e.g. "Order #123 was approved").</summary>
-    public string? Title { get; set; }
-
-    /// <summary>Optional longer description.</summary>
-    public string? Description { get; set; }
+    public string? TitleEn { get; set; }
+    public string? TitleAr { get; set; }
+    public string? SubtitleEn { get; set; }
+    public string? SubtitleAr { get; set; }
+    public string? Icon { get; set; }
+    public string? Severity { get; set; }
 
     public string? Module { get; set; }
     public DateTime Timestamp { get; set; } = DateTime.UtcNow;
