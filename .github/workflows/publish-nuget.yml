@@ -1,0 +1,110 @@
+name: Publish NuGet
+
+# Publishes all packable projects in the solution to nuget.org.
+#
+# Triggers:
+#   • pushing a version tag like v1.2.3 (or v1.2.3-beta.1) — version is taken from the tag
+#   • manual run (workflow_dispatch) — you supply the version
+#
+# Required repository secret:
+#   NUGET_API_KEY — an API key from https://www.nuget.org/account/apikeys
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (e.g. 1.2.3 or 1.2.3-beta.1)'
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-nuget-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  DOTNET_VERSION: '10.0.x'
+  CONFIGURATION: Release
+  NUGET_FEED: https://api.nuget.org/v3/index.json
+  DOTNET_NOLOGO: 'true'
+  DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Determine version
+        id: version
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            # strip the leading "v" from the tag (refs/tags/v1.2.3 -> 1.2.3)
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          if [ -z "$VERSION" ]; then
+            echo "::error::Could not determine a version to publish."
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Publishing version: $VERSION"
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: >
+          dotnet build
+          --configuration $CONFIGURATION
+          --no-restore
+          -p:Version=${{ steps.version.outputs.version }}
+          -p:ContinuousIntegrationBuild=true
+
+      - name: Test
+        shell: bash
+        run: |
+          if find . -name '*Tests.csproj' -o -name '*.Tests.csproj' | grep -q .; then
+            dotnet test --configuration $CONFIGURATION --no-build --verbosity normal
+          else
+            echo "No test projects found; skipping tests."
+          fi
+
+      - name: Pack
+        run: >
+          dotnet pack
+          --configuration $CONFIGURATION
+          --no-build
+          --output ./artifacts
+          -p:PackageVersion=${{ steps.version.outputs.version }}
+          -p:IncludeSymbols=true
+          -p:SymbolPackageFormat=snupkg
+
+      - name: Push to NuGet
+        run: >
+          dotnet nuget push "./artifacts/*.nupkg"
+          --api-key "${{ secrets.NUGET_API_KEY }}"
+          --source "$NUGET_FEED"
+          --skip-duplicate
+
+      - name: Upload packages as build artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-packages
+          path: ./artifacts/*.*nupkg
+          if-no-files-found: warn

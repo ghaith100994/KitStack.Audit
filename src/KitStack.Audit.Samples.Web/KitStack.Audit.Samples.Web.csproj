@@ -1,0 +1,20 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+  </ItemGroup>
+
+  <!-- Place this project under src/ alongside the libraries. -->
+  <ItemGroup>
+    <ProjectReference Include="..\KitStack.Audit.AspNetCore\KitStack.Audit.AspNetCore.csproj" />
+    <ProjectReference Include="..\KitStack.Audit.EntityFrameworkCore\KitStack.Audit.EntityFrameworkCore.csproj" />
+    <ProjectReference Include="..\KitStack.Audit.Sinks.EntityFrameworkCore\KitStack.Audit.Sinks.EntityFrameworkCore.csproj" />
+  </ItemGroup>
+
+  <!-- Version resolved centrally via Directory.Packages.props -->
+
+</Project>
