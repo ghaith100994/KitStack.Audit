@@ -1,14 +1,4 @@
 name: Publish NuGet
-
-# Publishes all packable projects in the solution to nuget.org.
-#
-# Triggers:
-#   • pushing a version tag like v1.2.3 (or v1.2.3-beta.1) — version is taken from the tag
-#   • manual run (workflow_dispatch) — you supply the version
-#
-# Required repository secret:
-#   NUGET_API_KEY — an API key from https://www.nuget.org/account/apikeys
-
 on:
   push:
     tags:
@@ -18,14 +8,12 @@ on:
       version:
         description: 'Version to publish (e.g. 1.2.3 or 1.2.3-beta.1)'
         required: true
-
 permissions:
   contents: read
-
+  id-token: write  # Required for Trusted Publishing
 concurrency:
   group: publish-nuget-${{ github.ref }}
   cancel-in-progress: false
-
 env:
   DOTNET_VERSION: '10.0.x'
   CONFIGURATION: Release
@@ -33,20 +21,17 @@ env:
   DOTNET_NOLOGO: 'true'
   DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
-
 jobs:
   publish:
     runs-on: ubuntu-latest
-
+    environment: nuget
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
-
       - name: Determine version
         id: version
         shell: bash
@@ -63,10 +48,8 @@ jobs:
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Publishing version: $VERSION"
-
       - name: Restore
         run: dotnet restore
-
       - name: Build
         run: >
           dotnet build
@@ -74,7 +57,6 @@ jobs:
           --no-restore
           -p:Version=${{ steps.version.outputs.version }}
           -p:ContinuousIntegrationBuild=true
-
       - name: Test
         shell: bash
         run: |
@@ -83,7 +65,6 @@ jobs:
           else
             echo "No test projects found; skipping tests."
           fi
-
       - name: Pack
         run: >
           dotnet pack
@@ -93,14 +74,11 @@ jobs:
           -p:PackageVersion=${{ steps.version.outputs.version }}
           -p:IncludeSymbols=true
           -p:SymbolPackageFormat=snupkg
-
       - name: Push to NuGet
         run: >
           dotnet nuget push "./artifacts/*.nupkg"
-          --api-key "${{ secrets.NUGET_API_KEY }}"
           --source "$NUGET_FEED"
           --skip-duplicate
-
       - name: Upload packages as build artifact
         if: always()
         uses: actions/upload-artifact@v4
