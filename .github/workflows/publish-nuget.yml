@@ -10,7 +10,6 @@ on:
         required: true
 permissions:
   contents: read
-  id-token: write
 concurrency:
   group: publish-nuget-${{ github.ref }}
   cancel-in-progress: false
@@ -81,25 +80,11 @@ jobs:
           -p:SymbolPackageFormat=snupkg
           -m:1
 
-      - name: Get NuGet trusted publishing token
-        id: oidc
-        run: |
-          RESPONSE=$(curl -s \
-            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=nuget:publish")
-          echo "Response: $RESPONSE"
-          TOKEN=$(echo "$RESPONSE" | jq -r '.value')
-          if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
-            echo "::error::Failed to obtain OIDC token"
-            exit 1
-          fi
-          echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
-
       - name: Push to NuGet
         run: |
           for pkg in ./artifacts/*.nupkg; do
             dotnet nuget push "$pkg" \
-              --api-key "${{ steps.oidc.outputs.token }}" \
+              --api-key "${{ secrets.NUGET_API_KEY }}" \
               --source "$NUGET_FEED" \
               --skip-duplicate
           done
