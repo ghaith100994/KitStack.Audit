@@ -1,23 +1,24 @@
 using KitStack.Audit.Abstractions.Contracts;
+using KitStack.Audit.Abstractions.Extensions;
 using KitStack.Audit.Abstractions.Models;
-using KitStack.Audit.Sinks.Mongo.Documents;
+using KitStack.Audit.Sinks.Mongo.Persistence;
 using Microsoft.Extensions.Logging;
-using MongoDB.Driver;
 
 namespace KitStack.Audit.Sinks.Mongo.Sinks;
 
 /// <summary>
-/// Persists captured trails to a MongoDB collection as native documents.
+/// Persists captured trails to MongoDB through <see cref="MongoAuditDbContext"/> (EF Core provider).
+/// Each <see cref="TrailDto"/> is flattened to an <see cref="AuditTrail"/> document.
 /// Errors are logged and swallowed — the originating business transaction has already committed.
 /// </summary>
 public sealed class MongoAuditSink : IAuditSink
 {
-    private readonly IMongoCollection<AuditTrailDocument> _collection;
+    private readonly MongoAuditDbContext _context;
     private readonly ILogger<MongoAuditSink>? _logger;
 
-    public MongoAuditSink(IMongoCollection<AuditTrailDocument> collection, ILogger<MongoAuditSink>? logger = null)
+    public MongoAuditSink(MongoAuditDbContext context, ILogger<MongoAuditSink>? logger = null)
     {
-        _collection = collection;
+        _context = context;
         _logger = logger;
     }
 
@@ -28,15 +29,16 @@ public sealed class MongoAuditSink : IAuditSink
 
         try
         {
-            var documents = new List<AuditTrailDocument>(trails.Count);
+            var entities = new List<AuditTrail>(trails.Count);
             foreach (var dto in trails)
-                documents.Add(AuditTrailDocument.From(dto));
+                entities.Add(dto.ToAuditTrail());
 
-            await _collection.InsertManyAsync(documents, options: null, cancellationToken).ConfigureAwait(false);
+            _context.AuditTrails.AddRange(entities);
+            await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
-            _logger?.LogError(ex, "Error while saving {Count} audit trails to MongoDB.", trails.Count);
+            _logger?.LogError(ex, "Error while saving {Count} audit trails to MongoDB (EF Core).", trails.Count);
         }
     }
 }
