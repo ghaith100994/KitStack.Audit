@@ -16,19 +16,18 @@ using Microsoft.Extensions.Options;
 namespace KitStack.Audit.EntityFrameworkCore.Interceptors;
 
 /// <summary>
-/// Captures Added/Modified/Deleted entities as <see cref="TrailDto"/> on save and forwards
-/// the survivors to the registered <see cref="IAuditSink"/>.
+/// Captures Added/Modified/Deleted entities as <see cref="TrailDto"/> on save and forwards them
+/// to the registered <see cref="IAuditSink"/>. If an <see cref="IActivityNarrationDispatcher"/>
+/// and an <see cref="IActivitySink"/> are also registered, each surviving change is narrated into
+/// an <see cref="ActivityEvent"/> and written too.
 ///
 /// Lifecycle:
-///   SavingChanges  -> snapshot trails (change tracker is still intact, original values available)
-///   SavedChanges   -> apply the auditable gate and write to the sink (business save succeeded)
-///   SaveChangesFailed -> discard the snapshot (no orphan trails for rolled-back work)
-///
-/// Register as <c>Scoped</c> and attach via <c>options.AddInterceptors(sp.GetRequiredService&lt;...&gt;())</c>.
+///   SavingChanges      -> snapshot trails (change tracker intact, original values available)
+///   SavedChanges       -> apply the auditable gate, narrate, then write to the sinks
+///   SaveChangesFailed  -> discard the snapshot (no orphan trails for rolled-back work)
 /// </summary>
 public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
 {
-    // Keyed by DbContext so a singleton/shared interceptor stays correct; entries are GC'd with the context.
     private static readonly ConditionalWeakTable<DbContext, List<PendingTrail>> Pending = new();
 
     private readonly IAuditContextAccessor _user;
@@ -36,6 +35,8 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
     private readonly IAuditEntityFilter _filter;
     private readonly AuditOptions _options;
     private readonly IAuditableEntityRegistry? _registry;
+    private readonly IActivityNarrationDispatcher? _narration;
+    private readonly IActivitySink? _activitySink;
     private readonly ILogger<AuditSaveChangesInterceptor>? _logger;
 
     public AuditSaveChangesInterceptor(
@@ -44,6 +45,8 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
         IAuditEntityFilter filter,
         IOptions<AuditOptions> options,
         IAuditableEntityRegistry? registry = null,
+        IActivityNarrationDispatcher? narration = null,
+        IActivitySink? activitySink = null,
         ILogger<AuditSaveChangesInterceptor>? logger = null)
     {
         _user = user;
@@ -51,6 +54,8 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
         _filter = filter;
         _options = options.Value;
         _registry = registry;
+        _narration = narration;
+        _activitySink = activitySink;
         _logger = logger;
     }
 
@@ -74,7 +79,6 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
 
     public override int SavedChanges(SaveChangesCompletedEventData eventData, int result)
     {
-        // Sync path: block on the async write. Prefer SaveChangesAsync where possible.
         FlushAsync(eventData.Context, CancellationToken.None).GetAwaiter().GetResult();
         return base.SavedChanges(eventData, result);
     }
@@ -139,7 +143,6 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
 
             foreach (var property in entry.Properties)
             {
-                // Store-generated keys are temporary until after save; skip (use client-generated keys to capture them).
                 if (property.IsTemporary)
                     continue;
 
@@ -178,11 +181,10 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
                 }
             }
 
-            // A modified row where no audited property actually changed -> nothing to record.
             if (entry.State == EntityState.Modified && trail.ModifiedProperties.Count == 0)
                 continue;
 
-            captured.Add(new PendingTrail(trail, resource));
+            captured.Add(new PendingTrail(trail, resource, entityType));
         }
 
         if (captured.Count == 0)
@@ -200,7 +202,9 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
 
         var module = (context as IAuditableDbContext)?.AuditModule ?? _options.DefaultModule;
 
-        var toWrite = new List<TrailDto>(captured.Count);
+        var trailsToWrite = new List<TrailDto>(captured.Count);
+        var activities = new List<ActivityEvent>();
+
         foreach (var pending in captured)
         {
             if (_options.EnforceAuditableSetting && _registry is not null && pending.Resource is not null)
@@ -220,22 +224,59 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
                     continue;
             }
 
-            toWrite.Add(pending.Trail);
+            trailsToWrite.Add(pending.Trail);
+
+            // Narrate the surviving change into an activity, if narration is configured.
+            if (_narration is not null)
+            {
+                var activity = _narration.Narrate(ToNarrationContext(pending));
+                if (activity is not null)
+                    activities.Add(activity);
+            }
         }
 
-        if (toWrite.Count == 0)
-            return;
-
-        try
+        if (trailsToWrite.Count > 0)
         {
-            await _sink.WriteAsync(toWrite, ct).ConfigureAwait(false);
+            try
+            {
+                await _sink.WriteAsync(trailsToWrite, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Failed to write {Count} audit trails.", trailsToWrite.Count);
+            }
         }
-        catch (Exception ex)
+
+        if (_activitySink is not null && activities.Count > 0)
         {
-            // The business transaction has already committed; auditing must never surface here.
-            _logger?.LogError(ex, "Failed to write {Count} audit trails.", toWrite.Count);
+            try
+            {
+                await _activitySink.WriteActivitiesAsync(activities, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Failed to write {Count} activity events.", activities.Count);
+            }
         }
     }
 
-    private sealed record PendingTrail(TrailDto Trail, string? Resource);
+    private AuditNarrationContext ToNarrationContext(PendingTrail pending)
+    {
+        var trail = pending.Trail;
+        return new AuditNarrationContext
+        {
+            EntityType = pending.EntityType,
+            TrailType = trail.Type,
+            UserId = trail.UserId,
+            UserName = _user.UserName,
+            Module = trail.Module,
+            PrimaryKey = trail.KeyValues.Count == 0 ? null : string.Join(",", trail.KeyValues.Values),
+            OldValues = trail.OldValues,
+            NewValues = trail.NewValues,
+            ModifiedProperties = trail.ModifiedProperties,
+            Timestamp = trail.DateTime,
+        };
+    }
+
+    private sealed record PendingTrail(TrailDto Trail, string? Resource, Type EntityType);
 }

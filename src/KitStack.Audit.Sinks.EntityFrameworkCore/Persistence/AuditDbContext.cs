@@ -11,11 +11,11 @@ public class AuditDbContext : DbContext
 {
     public AuditDbContext(DbContextOptions<AuditDbContext> options) : base(options)
     {
-        // Trails are appended in a single batch per save; skip the implicit transaction overhead.
         Database.AutoTransactionBehavior = AutoTransactionBehavior.Never;
     }
 
     public DbSet<AuditTrail> AuditTrails => Set<AuditTrail>();
+    public DbSet<ActivityEvent> Activities => Set<ActivityEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

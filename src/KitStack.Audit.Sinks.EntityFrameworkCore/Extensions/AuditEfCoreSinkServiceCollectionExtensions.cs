@@ -9,12 +9,8 @@ namespace KitStack.Audit.Sinks.EntityFrameworkCore.Extensions;
 
 /// <summary>
 /// Registers the relational audit sink. The provider (SQL Server, PostgreSQL, ...) is supplied by
-/// the caller so this package stays provider-agnostic.
-///
-/// <code>
-/// services.AddKitStackAuditEntityFrameworkCoreSink(o =>
-///     o.UseSqlServer(configuration.GetConnectionString("Audit")));
-/// </code>
+/// the caller so this package stays provider-agnostic. The same sink instance backs both
+/// <see cref="IAuditSink"/> and <see cref="IActivitySink"/>.
 /// </summary>
 public static class AuditEfCoreSinkServiceCollectionExtensions
 {
@@ -26,15 +22,10 @@ public static class AuditEfCoreSinkServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(configureDbContext);
 
         services.AddDbContext<AuditDbContext>(configureDbContext);
-        services.TryAddScoped<IAuditSink, EfCoreAuditSink>();
-
+        RegisterSink(services);
         return services;
     }
 
-    /// <summary>
-    /// Overload for when provider configuration needs the service provider
-    /// (e.g. to read connection details from bound options).
-    /// </summary>
     public static IServiceCollection AddKitStackAuditEntityFrameworkCoreSink(
         this IServiceCollection services,
         Action<IServiceProvider, DbContextOptionsBuilder> configureDbContext)
@@ -43,8 +34,14 @@ public static class AuditEfCoreSinkServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(configureDbContext);
 
         services.AddDbContext<AuditDbContext>(configureDbContext);
-        services.TryAddScoped<IAuditSink, EfCoreAuditSink>();
-
+        RegisterSink(services);
         return services;
+    }
+
+    private static void RegisterSink(IServiceCollection services)
+    {
+        services.TryAddScoped<EfCoreAuditSink>();
+        services.TryAddScoped<IAuditSink>(sp => sp.GetRequiredService<EfCoreAuditSink>());
+        services.TryAddScoped<IActivitySink>(sp => sp.GetRequiredService<EfCoreAuditSink>());
     }
 }

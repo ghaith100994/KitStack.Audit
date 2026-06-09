@@ -11,15 +11,9 @@ using MongoDB.Bson.Serialization.Serializers;
 namespace KitStack.Audit.Sinks.Mongo.Extensions;
 
 /// <summary>
-/// Registers the MongoDB audit sink using the MongoDB.EntityFrameworkCore provider.
-///
-/// <code>
-/// services.AddKitStackAuditMongoSink(
-///     connectionString: configuration["Audit:Database:ConnectionString"]!,
-///     databaseName:     configuration["Audit:Database:DatabaseName"]!);
-/// </code>
-///
-/// Trails are written to the "AuditTrails" collection.
+/// Registers the MongoDB audit sink using the MongoDB.EntityFrameworkCore provider. The same sink
+/// instance backs both <see cref="IAuditSink"/> and <see cref="IActivitySink"/>.
+/// Trails go to the "AuditTrails" collection; activities go to "ActivityEvents".
 /// </summary>
 public static class AuditMongoSinkServiceCollectionExtensions
 {
@@ -32,11 +26,13 @@ public static class AuditMongoSinkServiceCollectionExtensions
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
         ArgumentException.ThrowIfNullOrWhiteSpace(databaseName);
 
-        // Store Guids as strings (matches the original ERP behavior). Safe to call repeatedly.
         BsonSerializer.TryRegisterSerializer(new GuidSerializer(BsonType.String));
 
         services.AddDbContext<MongoAuditDbContext>(o => o.UseMongoDB(connectionString, databaseName));
-        services.TryAddScoped<IAuditSink, MongoAuditSink>();
+
+        services.TryAddScoped<MongoAuditSink>();
+        services.TryAddScoped<IAuditSink>(sp => sp.GetRequiredService<MongoAuditSink>());
+        services.TryAddScoped<IActivitySink>(sp => sp.GetRequiredService<MongoAuditSink>());
 
         return services;
     }

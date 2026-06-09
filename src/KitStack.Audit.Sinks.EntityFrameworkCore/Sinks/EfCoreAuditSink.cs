@@ -7,11 +7,10 @@ using Microsoft.Extensions.Logging;
 namespace KitStack.Audit.Sinks.EntityFrameworkCore.Sinks;
 
 /// <summary>
-/// Persists captured trails to a relational store via <see cref="AuditDbContext"/>.
-/// Maps each <see cref="TrailDto"/> to a flat <see cref="AuditTrail"/> and inserts the batch.
+/// Persists trails (and, optionally, activities) to a relational store via <see cref="AuditDbContext"/>.
 /// Errors are logged and swallowed — the originating business transaction has already committed.
 /// </summary>
-public sealed class EfCoreAuditSink : IAuditSink
+public sealed class EfCoreAuditSink : IAuditSink, IActivitySink
 {
     private readonly AuditDbContext _context;
     private readonly ILogger<EfCoreAuditSink>? _logger;
@@ -39,6 +38,22 @@ public sealed class EfCoreAuditSink : IAuditSink
         catch (Exception ex)
         {
             _logger?.LogError(ex, "Error while saving {Count} audit trails.", trails.Count);
+        }
+    }
+
+    public async Task WriteActivitiesAsync(IReadOnlyList<ActivityEvent> activities, CancellationToken cancellationToken = default)
+    {
+        if (activities is null || activities.Count == 0)
+            return;
+
+        try
+        {
+            await _context.Activities.AddRangeAsync(activities, cancellationToken).ConfigureAwait(false);
+            await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Error while saving {Count} activity events.", activities.Count);
         }
     }
 }

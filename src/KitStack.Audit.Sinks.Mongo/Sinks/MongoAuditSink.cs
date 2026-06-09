@@ -7,11 +7,10 @@ using Microsoft.Extensions.Logging;
 namespace KitStack.Audit.Sinks.Mongo.Sinks;
 
 /// <summary>
-/// Persists captured trails to MongoDB through <see cref="MongoAuditDbContext"/> (EF Core provider).
-/// Each <see cref="TrailDto"/> is flattened to an <see cref="AuditTrail"/> document.
+/// Persists trails (and, optionally, activities) to MongoDB through <see cref="MongoAuditDbContext"/>.
 /// Errors are logged and swallowed — the originating business transaction has already committed.
 /// </summary>
-public sealed class MongoAuditSink : IAuditSink
+public sealed class MongoAuditSink : IAuditSink, IActivitySink
 {
     private readonly MongoAuditDbContext _context;
     private readonly ILogger<MongoAuditSink>? _logger;
@@ -39,6 +38,22 @@ public sealed class MongoAuditSink : IAuditSink
         catch (Exception ex)
         {
             _logger?.LogError(ex, "Error while saving {Count} audit trails to MongoDB (EF Core).", trails.Count);
+        }
+    }
+
+    public async Task WriteActivitiesAsync(IReadOnlyList<ActivityEvent> activities, CancellationToken cancellationToken = default)
+    {
+        if (activities is null || activities.Count == 0)
+            return;
+
+        try
+        {
+            _context.Activities.AddRange(activities);
+            await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Error while saving {Count} activity events to MongoDB (EF Core).", activities.Count);
         }
     }
 }
