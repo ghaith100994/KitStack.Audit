@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Globalization;
 using System.Reflection;
 using System.Runtime.CompilerServices;
@@ -133,12 +134,23 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
             var entityType = entry.Entity.GetType();
             var resource = entityType.GetCustomAttribute<AuditDefinitionAttribute>(inherit: true)?.Resource;
 
+            // Resolve the trail type once upfront — avoids it remaining as default(TrailType)
+            // if every property in the loop is skipped (IsTemporary, IsPrimaryKey, etc.)
+            var trailType = entry.State switch
+            {
+                EntityState.Added => TrailType.Create,
+                EntityState.Deleted => TrailType.Delete,
+                EntityState.Modified => TrailType.Update,
+                _ => TrailType.Create,
+            };
+
             var trail = new TrailDto
             {
                 TableName = entityType.Name,
                 UserId = userId,
                 DateTime = utcNow,
                 Module = module,
+                Type = trailType,
             };
 
             foreach (var property in entry.Properties)
@@ -147,6 +159,7 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
                     continue;
 
                 var name = property.Metadata.Name;
+
                 if (property.Metadata.IsPrimaryKey())
                 {
                     trail.KeyValues[name] = property.CurrentValue;
@@ -159,20 +172,19 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
                 switch (entry.State)
                 {
                     case EntityState.Added:
-                        trail.Type = TrailType.Create;
                         trail.NewValues[name] = current;
                         break;
 
                     case EntityState.Deleted:
-                        trail.Type = TrailType.Delete;
                         trail.OldValues[name] = original;
                         break;
 
                     case EntityState.Modified:
-                        if (property.IsModified &&
-                            property.OriginalValue?.Equals(property.CurrentValue) != true)
+                        // Use structural equality so collection-typed columns
+                        // (e.g. arrays/lists mapped via JSON columns or value converters)
+                        // are not reported as modified when their content is unchanged.
+                        if (property.IsModified && !AreValuesEqual(property.OriginalValue, property.CurrentValue))
                         {
-                            trail.Type = TrailType.Update;
                             trail.ModifiedProperties.Add(name);
                             trail.OldValues[name] = original;
                             trail.NewValues[name] = current;
@@ -181,6 +193,8 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
                 }
             }
 
+            // Skip Modified trails that turned out to have no real changes
+            // (e.g. only collection properties that are structurally equal).
             if (entry.State == EntityState.Modified && trail.ModifiedProperties.Count == 0)
                 continue;
 
@@ -209,10 +223,10 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
         {
             if (_options.EnforceAuditableSetting && _registry is not null && pending.Resource is not null)
             {
-                bool auditable;
+                bool isAuditable;
                 try
                 {
-                    auditable = await _registry.IsAuditableAsync(module, pending.Resource, ct).ConfigureAwait(false);
+                    isAuditable = await _registry.IsAuditableAsync(module, pending.Resource, ct).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
@@ -220,13 +234,12 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
                     continue;
                 }
 
-                if (!auditable)
+                if (!isAuditable)
                     continue;
             }
 
             trailsToWrite.Add(pending.Trail);
 
-            // Narrate the surviving change into an activity, if narration is configured.
             if (_narration is not null)
             {
                 var activity = _narration.Narrate(ToNarrationContext(pending));
@@ -243,7 +256,7 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
             }
             catch (Exception ex)
             {
-                _logger?.LogError(ex, "Failed to write {Count} audit trails.", trailsToWrite.Count);
+                _logger?.LogError(ex, "Failed to write {Count} audit trail(s).", trailsToWrite.Count);
             }
         }
 
@@ -255,7 +268,7 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
             }
             catch (Exception ex)
             {
-                _logger?.LogError(ex, "Failed to write {Count} activity events.", activities.Count);
+                _logger?.LogError(ex, "Failed to write {Count} activity event(s).", activities.Count);
             }
         }
     }
@@ -276,6 +289,39 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
             ModifiedProperties = trail.ModifiedProperties,
             Timestamp = trail.DateTime,
         };
+    }
+
+    /// <summary>
+    /// Structural equality check that handles collection-typed property values correctly.
+    /// <para>
+    /// EF Core marks a property as <c>IsModified = true</c> whenever the change tracker
+    /// detects the reference has changed, even if the underlying sequence is identical.
+    /// <see cref="List{T}"/> and arrays do not override <see cref="object.Equals"/>, so a
+    /// plain <c>a?.Equals(b)</c> call always returns <c>false</c> for those types —
+    /// producing false positives in <c>ModifiedProperties</c>.
+    /// </para>
+    /// </summary>
+    private static bool AreValuesEqual(object? a, object? b)
+    {
+        if (ReferenceEquals(a, b)) return true;
+        if (a is null || b is null) return false;
+
+        // Fast path for primitive / value-type equality
+        if (a.Equals(b)) return true;
+
+        // Structural equality for any enumerable (arrays, List<T>, etc.)
+        if (a is IEnumerable ea && b is IEnumerable eb)
+        {
+            var listA = ea.Cast<object?>().ToList();
+            var listB = eb.Cast<object?>().ToList();
+
+            if (listA.Count != listB.Count)
+                return false;
+
+            return listA.Zip(listB, (x, y) => AreValuesEqual(x, y)).All(eq => eq);
+        }
+
+        return false;
     }
 
     private sealed record PendingTrail(TrailDto Trail, string? Resource, Type EntityType);
