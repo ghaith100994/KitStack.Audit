@@ -9,4 +9,7 @@ public sealed class FakeAuditContextAccessor : IAuditContextAccessor
 {
     public DefaultIdType UserId { get; set; }
     public string? UserName { get; set; } = "test-user";
+    public string? TenantId { get; set; }
+    public string? CorrelationId { get; set; }
+    public string? IpAddress { get; set; }
 }

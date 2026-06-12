@@ -11,6 +11,19 @@ public sealed class TrailDto
 {
     public DefaultIdType Id { get; set; } = Guid.NewGuid();
     public DefaultIdType UserId { get; set; }
+
+    /// <summary>Display name of the acting user, if the context accessor provides one.</summary>
+    public string? UserName { get; set; }
+
+    /// <summary>Tenant the change belongs to in multi-tenant applications.</summary>
+    public string? TenantId { get; set; }
+
+    /// <summary>Correlation/trace id linking the trail to the originating request.</summary>
+    public string? CorrelationId { get; set; }
+
+    /// <summary>Client IP address of the originating request.</summary>
+    public string? IpAddress { get; set; }
+
     public string? TableName { get; set; }
     public string? Module { get; set; }
     public TrailType Type { get; set; }

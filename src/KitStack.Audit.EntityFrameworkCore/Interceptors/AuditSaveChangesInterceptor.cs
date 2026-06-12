@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Reflection;
 using System.Runtime.CompilerServices;
@@ -30,6 +31,9 @@ namespace KitStack.Audit.EntityFrameworkCore.Interceptors;
 public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
 {
     private static readonly ConditionalWeakTable<DbContext, List<PendingTrail>> Pending = new();
+
+    // Per-entity-type redaction map derived from [AuditIgnore]/[AuditMask] attributes.
+    private static readonly ConcurrentDictionary<Type, Dictionary<string, PropertyRedaction>> RedactionCache = new();
 
     private readonly IAuditContextAccessor _user;
     private readonly IAuditSink _sink;
@@ -121,6 +125,10 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
         var culture = CultureInfo.InvariantCulture;
         var utcNow = DateTime.UtcNow;
         var userId = _user.UserId;
+        var userName = _user.UserName;
+        var tenantId = _user.TenantId;
+        var correlationId = _user.CorrelationId;
+        var ipAddress = _user.IpAddress;
 
         var captured = new List<PendingTrail>();
 
@@ -148,10 +156,16 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
             {
                 TableName = entityType.Name,
                 UserId = userId,
+                UserName = userName,
+                TenantId = tenantId,
+                CorrelationId = correlationId,
+                IpAddress = ipAddress,
                 DateTime = utcNow,
                 Module = module,
                 Type = trailType,
             };
+
+            var redactions = RedactionCache.GetOrAdd(entityType, BuildRedactionMap);
 
             foreach (var property in entry.Properties)
             {
@@ -166,8 +180,19 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
                     continue;
                 }
 
+                var redaction = ResolveRedaction(redactions, name);
+                if (redaction.Kind == RedactionKind.Ignore)
+                    continue;
+
                 var original = AuditValueConverter.Normalize(property.OriginalValue, culture);
                 var current = AuditValueConverter.Normalize(property.CurrentValue, culture);
+
+                if (redaction.Kind == RedactionKind.Mask)
+                {
+                    var mask = redaction.MaskText ?? _options.MaskText;
+                    original = original is null ? null : mask;
+                    current = current is null ? null : mask;
+                }
 
                 switch (entry.State)
                 {
@@ -281,7 +306,9 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
             EntityType = pending.EntityType,
             TrailType = trail.Type,
             UserId = trail.UserId,
-            UserName = _user.UserName,
+            UserName = trail.UserName ?? _user.UserName,
+            TenantId = trail.TenantId,
+            CorrelationId = trail.CorrelationId,
             Module = trail.Module,
             PrimaryKey = trail.KeyValues.Count == 0 ? null : string.Join(",", trail.KeyValues.Values),
             OldValues = trail.OldValues,
@@ -322,6 +349,53 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
         }
 
         return false;
+    }
+
+    // ── redaction ([AuditIgnore]/[AuditMask] + AuditOptions name lists) ──
+
+    private static Dictionary<string, PropertyRedaction> BuildRedactionMap(Type entityType)
+    {
+        var map = new Dictionary<string, PropertyRedaction>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var property in entityType.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+        {
+            if (property.GetCustomAttribute<AuditIgnoreAttribute>(inherit: true) is not null)
+            {
+                map[property.Name] = new PropertyRedaction(RedactionKind.Ignore, null);
+            }
+            else if (property.GetCustomAttribute<AuditMaskAttribute>(inherit: true) is { } mask)
+            {
+                map[property.Name] = new PropertyRedaction(RedactionKind.Mask, mask.MaskText);
+            }
+        }
+
+        return map;
+    }
+
+    private PropertyRedaction ResolveRedaction(Dictionary<string, PropertyRedaction> attributeMap, string propertyName)
+    {
+        if (attributeMap.TryGetValue(propertyName, out var redaction))
+            return redaction;
+
+        if (_options.ExcludedProperties.Contains(propertyName, StringComparer.OrdinalIgnoreCase))
+            return new PropertyRedaction(RedactionKind.Ignore, null);
+
+        if (_options.MaskedProperties.Contains(propertyName, StringComparer.OrdinalIgnoreCase))
+            return new PropertyRedaction(RedactionKind.Mask, null);
+
+        return PropertyRedaction.None;
+    }
+
+    private enum RedactionKind
+    {
+        None,
+        Ignore,
+        Mask,
+    }
+
+    private readonly record struct PropertyRedaction(RedactionKind Kind, string? MaskText)
+    {
+        public static PropertyRedaction None { get; } = new(RedactionKind.None, null);
     }
 
     private sealed record PendingTrail(TrailDto Trail, string? Resource, Type EntityType);

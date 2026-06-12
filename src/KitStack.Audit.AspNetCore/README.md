@@ -1,7 +1,7 @@
 # KitStack.Audit.AspNetCore
 
-One-call wiring for KitStack.Audit. Binds `AuditOptions`, registers the EF Core capture source,
-and selects a sink from configuration.
+One-call wiring for KitStack.Audit. Binds `AuditOptions`, registers the EF Core capture source
+and the manual `IAuditWriter`, and selects a sink from configuration.
 
 ## Setup
 
@@ -25,8 +25,11 @@ builder.Services.AddKitStackAudit<IAggregateRoot>(
     builder.Configuration,
     efSinkProvider: o => o.UseSqlServer(builder.Configuration.GetConnectionString("Audit")));
 
-// mongo / fake sinks need no provider delegate:
+// mongo / file / fake sinks need no provider delegate:
 // builder.Services.AddKitStackAudit(builder.Configuration);
+
+// or configure everything in code (no IConfiguration section):
+// builder.Services.AddKitStackAudit(o => { o.Sink = "file"; o.MaskedProperties.Add("Password"); });
 
 // the current user (application-specific) and interceptor attachment are your responsibility:
 builder.Services.AddScoped<IAuditContextAccessor, CurrentUserAuditContextAccessor>();
@@ -44,11 +47,12 @@ builder.Services.AddHealthChecks().AddKitStackAudit();
 
 ## Sink selection (`Audit:Sink`)
 
-| Value     | Sink                                    | Needs                                            |
-|-----------|-----------------------------------------|--------------------------------------------------|
-| `efcore`  | relational (EF Core)                    | `efSinkProvider` delegate (your DB driver)       |
-| `mongo`   | MongoDB                                 | `Audit:Database:ConnectionString` + `DatabaseName` |
-| `fake`    | in-memory (`KitStack.Audit.Fakes`)      | nothing                                          |
+| Value     | Sink                                          | Needs                                            |
+|-----------|-----------------------------------------------|--------------------------------------------------|
+| `efcore`  | relational (EF Core)                          | `efSinkProvider` delegate (your DB driver)       |
+| `mongo`   | MongoDB                                       | `Audit:Database:ConnectionString` + `DatabaseName` |
+| `file`    | JSON Lines (`KitStack.Audit.Sinks.File`)      | optional `Audit:File` section (directory, rolling) |
+| `fake`    | in-memory (`KitStack.Audit.Fakes`)            | nothing                                          |
 
 ## License
 Apache-2.0

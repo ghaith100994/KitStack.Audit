@@ -10,6 +10,16 @@ public class ActivityEvent
 {
     public DefaultIdType Id { get; set; } = Guid.NewGuid();
     public DefaultIdType UserId { get; set; }
+
+    /// <summary>Display name of the acting user, if available.</summary>
+    public string? UserName { get; set; }
+
+    /// <summary>Tenant the activity belongs to in multi-tenant applications.</summary>
+    public string? TenantId { get; set; }
+
+    /// <summary>Correlation/trace id linking the activity to the originating request.</summary>
+    public string? CorrelationId { get; set; }
+
     public string? EntityType { get; set; }
     public string? EntityId { get; set; }
     public TrailType Action { get; set; }

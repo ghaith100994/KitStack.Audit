@@ -1,9 +1,12 @@
 using KitStack.Audit.Abstractions.Contracts;
 using KitStack.Audit.Abstractions.Options;
+using KitStack.Audit.Abstractions.Services;
 using KitStack.Audit.AspNetCore.Narration;
 using KitStack.Audit.EntityFrameworkCore.Extensions;
 using KitStack.Audit.Fakes.Extensions;
 using KitStack.Audit.Sinks.EntityFrameworkCore.Extensions;
+using KitStack.Audit.Sinks.File.Extensions;
+using KitStack.Audit.Sinks.File.Options;
 using KitStack.Audit.Sinks.Mongo.Extensions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -13,7 +16,8 @@ namespace Microsoft.Extensions.DependencyInjection;
 
 /// <summary>
 /// One-call setup for KitStack.Audit. Binds <c>AuditOptions</c>, registers the EF Core capture
-/// source, and selects a sink based on <c>Audit:Sink</c> ("efcore", "mongo", or "fake").
+/// source and the manual <c>IAuditWriter</c>, and selects a sink based on <c>Audit:Sink</c>
+/// ("efcore", "mongo", "file", or "fake").
 ///
 /// The application is still responsible for:
 ///   • registering an <see cref="IAuditContextAccessor"/> (the current user), and
@@ -53,6 +57,30 @@ public static class AuditServiceCollectionExtensions
     }
 
     /// <summary>
+    /// Code-only setup without an <see cref="IConfiguration"/> section: configure
+    /// <see cref="AuditOptions"/> in the delegate and the sink is selected from
+    /// <c>AuditOptions.Sink</c> exactly like the configuration-bound overloads.
+    /// </summary>
+    public static IServiceCollection AddKitStackAudit(
+        this IServiceCollection services,
+        Action<AuditOptions> configureOptions,
+        Action<DbContextOptionsBuilder>? efSinkProvider = null)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(configureOptions);
+
+        services.AddKitStackAuditCapture();
+        services.Configure(configureOptions);
+
+        var options = new AuditOptions();
+        configureOptions(options);
+        SelectSink(services, options, efSinkProvider, fileOptionsSection: null);
+
+        services.AddKitStackAuditManualWriter();
+        return services;
+    }
+
+    /// <summary>
     /// Registers the activity-narration dispatcher. Register your <c>IAuditNarrator</c>
     /// implementations separately; they are discovered via DI.
     /// </summary>
@@ -60,6 +88,19 @@ public static class AuditServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
         services.TryAddSingleton<IActivityNarrationDispatcher, ActivityNarrationDispatcher>();
+        return services;
+    }
+
+    /// <summary>
+    /// Registers the manual capture source (<see cref="IAuditWriter"/>) so application code can
+    /// record explicit audit trails for changes that don't flow through EF Core
+    /// (background jobs, bulk SQL, external calls). Included automatically by
+    /// <c>AddKitStackAudit</c>; call this directly only for capture-less setups.
+    /// </summary>
+    public static IServiceCollection AddKitStackAuditManualWriter(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        services.TryAddScoped<IAuditWriter, AuditWriter>();
         return services;
     }
 
@@ -72,6 +113,18 @@ public static class AuditServiceCollectionExtensions
         services.Configure<AuditOptions>(section);
 
         var options = section.Get<AuditOptions>() ?? new AuditOptions();
+        SelectSink(services, options, efSinkProvider, section.GetSection("File"));
+
+        services.AddKitStackAuditManualWriter();
+        return services;
+    }
+
+    private static void SelectSink(
+        IServiceCollection services,
+        AuditOptions options,
+        Action<DbContextOptionsBuilder>? efSinkProvider,
+        IConfiguration? fileOptionsSection)
+    {
         var sink = (options.Sink ?? "fake").Trim().ToLowerInvariant();
 
         switch (sink)
@@ -95,6 +148,13 @@ public static class AuditServiceCollectionExtensions
                 services.AddKitStackAuditMongoSink(db.ConnectionString!, db.DatabaseName!);
                 break;
 
+            case "file":
+            case "jsonl":
+                if (fileOptionsSection is not null)
+                    services.Configure<FileAuditSinkOptions>(fileOptionsSection);
+                services.AddKitStackAuditFileSink();
+                break;
+
             case "fake":
             case "inmemory":
             case "memory":
@@ -103,9 +163,7 @@ public static class AuditServiceCollectionExtensions
 
             default:
                 throw new InvalidOperationException(
-                    $"Unknown Audit:Sink value '{options.Sink}'. Expected 'efcore', 'mongo', or 'fake'.");
+                    $"Unknown Audit:Sink value '{options.Sink}'. Expected 'efcore', 'mongo', 'file', or 'fake'.");
         }
-
-        return services;
     }
 }

@@ -9,6 +9,18 @@ public class AuditTrail
     public DefaultIdType Id { get; set; }
     public DefaultIdType UserId { get; set; }
 
+    /// <summary>Display name of the acting user, if available.</summary>
+    public string? UserName { get; set; }
+
+    /// <summary>Tenant the change belongs to in multi-tenant applications.</summary>
+    public string? TenantId { get; set; }
+
+    /// <summary>Correlation/trace id linking the trail to the originating request.</summary>
+    public string? CorrelationId { get; set; }
+
+    /// <summary>Client IP address of the originating request.</summary>
+    public string? IpAddress { get; set; }
+
     /// <summary>The <see cref="Enums.TrailType"/> as a string (Create/Update/Delete).</summary>
     public string? Operation { get; set; }
 

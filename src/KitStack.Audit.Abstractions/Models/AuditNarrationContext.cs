@@ -13,6 +13,8 @@ public sealed class AuditNarrationContext
 
     public DefaultIdType UserId { get; init; }
     public string? UserName { get; init; }
+    public string? TenantId { get; init; }
+    public string? CorrelationId { get; init; }
     public string? Module { get; init; }
     public string? PrimaryKey { get; init; }
     public DateTime Timestamp { get; init; } = DateTime.UtcNow;

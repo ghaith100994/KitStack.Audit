@@ -19,6 +19,9 @@ public sealed class ActivityEventConfiguration : IEntityTypeConfiguration<Activi
         builder.HasKey(x => x.Id);
 
         builder.Property(x => x.Action).HasConversion<string>().HasMaxLength(32);
+        builder.Property(x => x.UserName).HasMaxLength(256);
+        builder.Property(x => x.TenantId).HasMaxLength(128);
+        builder.Property(x => x.CorrelationId).HasMaxLength(128);
         builder.Property(x => x.EntityType).HasMaxLength(256);
         builder.Property(x => x.EntityId).HasMaxLength(128);
         builder.Property(x => x.Module).HasMaxLength(128);

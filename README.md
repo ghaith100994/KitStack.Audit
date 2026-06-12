@@ -20,11 +20,17 @@ KitStack.Audit is a modular .NET library that provides audit-trail abstractions 
 - `IAuditSink` abstraction — write a batch of audit trails to any backend.
 - `IAuditNarrator` / `IActivityNarrationDispatcher` — turn raw entity changes into human-readable activity events.
 - EF Core `SaveChanges` interceptor that snapshots Added/Modified/Deleted aggregates and forwards them to the active sink.
+- Manual capture via `IAuditWriter` for changes that bypass EF Core (background jobs, bulk SQL, external calls).
 - Opt-in auditing: gate per entity with `[AuditDefinition]` and an `IAuditableEntityRegistry` (e.g. an "auditable tables" setting).
+- Sensitive-data redaction: `[AuditIgnore]` skips a property entirely, `[AuditMask]` records the change but hides the value; global name-based exclusion/masking via `AuditOptions`.
+- Rich audit context: every trail carries `UserId`, `UserName`, `TenantId`, `CorrelationId`, and `IpAddress` from the `IAuditContextAccessor`.
 - Sink implementations:
   - EF Core relational (SQL Server, PostgreSQL, ...)
   - MongoDB
+  - Rolling JSON-Lines files
   - Fake / in-memory sink for tests and dev
+  - `CompositeAuditSink` to fan out to several sinks at once
+- Read-side helpers: `GetOldValue<T>`/`GetNewValue<T>`/`HasChanged` on trails and narration contexts, plus JSON round-trip helpers on persisted `AuditTrail` records.
 - ASP.NET Core DI helpers and health checks.
 - Auditing never breaks the originating business transaction — sink failures are logged and swallowed.
 
@@ -32,13 +38,14 @@ KitStack.Audit is a modular .NET library that provides audit-trail abstractions 
 
 - Capture sources
   - [x] EF Core `SaveChanges` interceptor (KitStack.Audit.EntityFrameworkCore)
-  - [ ] Manual / explicit audit API
+  - [x] Manual / explicit audit API (`IAuditWriter`)
   - [ ] Message-bus consumer (community contributions welcome)
 - Sinks
   - [x] EF Core relational (KitStack.Audit.Sinks.EntityFrameworkCore)
   - [x] MongoDB (KitStack.Audit.Sinks.Mongo)
+  - [x] File / rolling-file JSON-Lines sink (KitStack.Audit.Sinks.File)
   - [x] Fake / in-memory (KitStack.Audit.Fakes)
-  - [ ] File / rolling-file sink
+  - [x] Composite sink (fan-out, in KitStack.Audit.Abstractions)
   - [ ] Serilog sink
   - [ ] Other stores / adapters (CosmosDB, Elasticsearch, etc.)
 - Relational providers to standardize and validate:
@@ -52,7 +59,7 @@ KitStack.Audit is a modular .NET library that provides audit-trail abstractions 
 Auditing has two independent axes:
 
 1. **Capture** — *what changed and where it came from.* The EF Core interceptor inspects the `ChangeTracker` on save, builds a `TrailDto` per Added/Modified/Deleted aggregate, applies the auditable-table gate, and normalizes values for serialization.
-2. **Sink** — *where the trail is written.* The captured trails are handed to the registered `IAuditSink` (EF Core, Mongo, or Fake). Sinks run detached from the originating `DbContext`, so a sink failure is logged and never rolls back the business transaction.
+2. **Sink** — *where the trail is written.* The captured trails are handed to the registered `IAuditSink` (EF Core, Mongo, File, or Fake — or a `CompositeAuditSink` fanning out to several). Sinks run detached from the originating `DbContext`, so a sink failure is logged and never rolls back the business transaction.
 
 This separation means you can swap SQL Server for Mongo, or swap the EF interceptor for another capture source, without touching application code that depends only on `KitStack.Audit.Abstractions`.
 
@@ -74,7 +81,7 @@ Install the abstractions plus the capture source and the sink you need:
 ```bash
 dotnet add package KitStack.Audit.Abstractions
 dotnet add package KitStack.Audit.EntityFrameworkCore
-dotnet add package KitStack.Audit.Sinks.EntityFrameworkCore   # or KitStack.Audit.Sinks.Mongo
+dotnet add package KitStack.Audit.Sinks.EntityFrameworkCore   # or KitStack.Audit.Sinks.Mongo / KitStack.Audit.Sinks.File
 dotnet add package KitStack.Audit.AspNetCore
 ```
 
@@ -93,17 +100,36 @@ Add an `Audit` section to your configuration:
   "Audit": {
     "Sink": "efcore",
     "EnforceAuditableSetting": true,
+    "ExcludedProperties": [ "RowVersion" ],
+    "MaskedProperties": [ "Password", "Token" ],
+    "MaskText": "***",
     "Database": {
       "Provider": "sqlserver",
       "ConnectionString": "Server=...;Database=Audit;..."
+    },
+    "File": {
+      "Directory": "audit-logs",
+      "RollInterval": "Day"
     }
   }
 }
 ```
 
-- `Sink` — `efcore`, `mongo`, or `fake`.
+- `Sink` — `efcore`, `mongo`, `file`, or `fake`.
 - `EnforceAuditableSetting` — when `true`, only entities marked auditable (via `[AuditDefinition]` + registry) are recorded; when `false`, every aggregate root is audited.
+- `ExcludedProperties` / `MaskedProperties` / `MaskText` — global, name-based redaction applied to every entity (see [Redaction](#redacting-sensitive-data)).
 - `Database` — connection/provider details for relational and document sinks.
+- `File` — directory and rolling policy for the JSON-Lines file sink.
+
+Prefer code over configuration? Use the code-only overload:
+
+```csharp
+builder.Services.AddKitStackAudit(o =>
+{
+    o.Sink = "file";
+    o.MaskedProperties.Add("Password");
+});
+```
 
 ## Usage
 
@@ -125,13 +151,69 @@ public class Order : AggregateRoot { /* ... */ }
 Provide a human-readable activity description by implementing a narrator:
 
 ```csharp
-public sealed class OrderNarrator : AuditNarratorBase
+public sealed class OrderNarrator : AuditNarratorBase<Order>
 {
-    public override bool CanNarrate(Type entityType) => entityType == typeof(Order);
-
     public override ActivityEvent? Narrate(AuditNarrationContext ctx)
-        => new ActivityEvent { /* map ctx to a friendly activity */ };
+        => new ActivityEvent
+        {
+            TitleEn = ctx.HasChanged(nameof(Order.Status))
+                ? $"Order moved to {ctx.GetNewValue<string>(nameof(Order.Status))}"
+                : "Order updated",
+        };
 }
+```
+
+### Redacting sensitive data
+
+Annotate properties to control what reaches the audit store:
+
+```csharp
+public class Customer
+{
+    public string Name { get; set; }
+
+    [AuditMask]                 // change is recorded, value stored as "***"
+    public string Password { get; set; }
+
+    [AuditMask("<hidden>")]     // custom mask text
+    public string ApiKey { get; set; }
+
+    [AuditIgnore]               // never captured at all
+    public string SearchCache { get; set; }
+}
+```
+
+`Audit:ExcludedProperties` and `Audit:MaskedProperties` apply the same rules by property
+name across every entity — useful for conventions like "always mask `Password`".
+
+### Manual auditing
+
+For changes that don't flow through EF Core (bulk SQL, background jobs, external calls),
+record trails explicitly with `IAuditWriter` (registered automatically by `AddKitStackAudit`):
+
+```csharp
+public class ImportJob(IAuditWriter audit)
+{
+    public async Task RunAsync()
+    {
+        // ... bulk update ...
+        await audit.RecordAsync(
+            "ImportBatch", TrailType.Update, entityId: batchId,
+            oldValues: new Dictionary<string, object?> { ["Status"] = "Pending" },
+            newValues: new Dictionary<string, object?> { ["Status"] = "Done" },
+            module: "Imports");
+    }
+}
+```
+
+### Writing to several sinks at once
+
+Wrap sinks in a `CompositeAuditSink` to fan out (e.g. relational + file):
+
+```csharp
+services.AddSingleton<IAuditSink>(sp => new CompositeAuditSink(
+    sp.GetRequiredService<EfCoreAuditSink>(),
+    sp.GetRequiredService<FileAuditSink>()));
 ```
 
 In tests, resolve the in-memory sink and assert what was captured:
@@ -147,12 +229,13 @@ Assert.Single(store.Trails, t => t.TableName == nameof(Order));
 
 ```
 src/
-  KitStack.Audit.Abstractions/             (IAuditSink, IAuditNarrator, AuditTrail, TrailDto, TrailType, AuditOptions, base classes)
-  KitStack.Audit.EntityFrameworkCore/      (AuditSaveChangesInterceptor, [AuditDefinition], change capture)
+  KitStack.Audit.Abstractions/             (IAuditSink, IAuditWriter, IAuditNarrator, AuditTrail, TrailDto, TrailType, AuditOptions, redaction attributes, CompositeAuditSink, base classes)
+  KitStack.Audit.EntityFrameworkCore/      (AuditSaveChangesInterceptor, [AuditDefinition], change capture, redaction)
   KitStack.Audit.Sinks.EntityFrameworkCore/(AuditDbContext, EfCoreAuditSink, relational health check)
   KitStack.Audit.Sinks.Mongo/              (MongoAuditSink, Bson serializer registration, health check)
+  KitStack.Audit.Sinks.File/               (FileAuditSink, rolling JSON-Lines files)
   KitStack.Audit.Fakes/                    (InMemoryAuditSink, IFakeAuditStore)
-  KitStack.Audit.AspNetCore/               (AddKitStackAudit, sink selection, BindSeparateDbContext, health-check registration)
+  KitStack.Audit.AspNetCore/               (AddKitStackAudit, sink selection, manual writer, health-check registration)
   KitStack.Audit.Samples.Web/              (sample web app, DB-backed example)
 tests/
   KitStack.Audit.Tests/                    (unit tests against the fake sink)

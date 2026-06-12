@@ -23,6 +23,7 @@
     <ProjectReference Include="..\KitStack.Audit.EntityFrameworkCore\KitStack.Audit.EntityFrameworkCore.csproj" />
     <ProjectReference Include="..\KitStack.Audit.Sinks.EntityFrameworkCore\KitStack.Audit.Sinks.EntityFrameworkCore.csproj" />
     <ProjectReference Include="..\KitStack.Audit.Sinks.Mongo\KitStack.Audit.Sinks.Mongo.csproj" />
+    <ProjectReference Include="..\KitStack.Audit.Sinks.File\KitStack.Audit.Sinks.File.csproj" />
     <ProjectReference Include="..\KitStack.Audit.Fakes\KitStack.Audit.Fakes.csproj" />
   </ItemGroup>
 

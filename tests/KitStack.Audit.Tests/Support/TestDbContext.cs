@@ -8,6 +8,7 @@ public class TestDbContext : DbContext, IAuditableDbContext
     public TestDbContext(DbContextOptions<TestDbContext> options) : base(options) { }
 
     public DbSet<Widget> Widgets => Set<Widget>();
+    public DbSet<SecureDocument> SecureDocuments => Set<SecureDocument>();
 
     // Settable so a single test can flip auditing off.
     public bool EnableAuditing { get; set; } = true;

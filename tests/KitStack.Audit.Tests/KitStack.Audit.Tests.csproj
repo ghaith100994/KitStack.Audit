@@ -10,6 +10,7 @@
     <ProjectReference Include="..\..\src\KitStack.Audit.Abstractions\KitStack.Audit.Abstractions.csproj" />
     <ProjectReference Include="..\..\src\KitStack.Audit.EntityFrameworkCore\KitStack.Audit.EntityFrameworkCore.csproj" />
     <ProjectReference Include="..\..\src\KitStack.Audit.Fakes\KitStack.Audit.Fakes.csproj" />
+    <ProjectReference Include="..\..\src\KitStack.Audit.Sinks.File\KitStack.Audit.Sinks.File.csproj" />
   </ItemGroup>
 
   <!-- Versions resolved centrally via Directory.Packages.props -->

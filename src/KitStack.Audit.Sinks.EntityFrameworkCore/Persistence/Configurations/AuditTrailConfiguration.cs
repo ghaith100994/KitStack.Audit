@@ -16,6 +16,10 @@ public sealed class AuditTrailConfiguration : IEntityTypeConfiguration<AuditTrai
         builder.HasKey(x => x.Id);
 
         builder.Property(x => x.Operation).HasMaxLength(32);
+        builder.Property(x => x.UserName).HasMaxLength(256);
+        builder.Property(x => x.TenantId).HasMaxLength(128);
+        builder.Property(x => x.CorrelationId).HasMaxLength(128);
+        builder.Property(x => x.IpAddress).HasMaxLength(64);
         builder.Property(x => x.Entity).HasMaxLength(256);
         builder.Property(x => x.Module).HasMaxLength(128);
 
@@ -29,5 +33,6 @@ public sealed class AuditTrailConfiguration : IEntityTypeConfiguration<AuditTrai
         builder.HasIndex(x => x.DateTime);
         builder.HasIndex(x => x.Entity);
         builder.HasIndex(x => x.UserId);
+        builder.HasIndex(x => x.TenantId);
     }
 }
