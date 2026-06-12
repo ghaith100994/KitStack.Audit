@@ -25,7 +25,27 @@ public sealed class TrailDto
     public string? IpAddress { get; set; }
 
     public string? TableName { get; set; }
+
+    /// <summary>Flat string form of the primary key (joined when composite), for direct querying.</summary>
+    public string? EntityId { get; set; }
+
     public string? Module { get; set; }
+
+    /// <summary>Sub-module / feature area from <c>[AuditDefinition]</c>.</summary>
+    public string? SubModule { get; set; }
+
+    /// <summary>Capture source that produced the trail (e.g. "EntityFrameworkCore", "Manual").</summary>
+    public string? Source { get; set; }
+
+    /// <summary>
+    /// Logical name of the owning/parent aggregate this change is also attributed to
+    /// (see <c>[AuditParent]</c>), e.g. "Committee" for a CommitteeMember change.
+    /// </summary>
+    public string? RelatedEntityType { get; set; }
+
+    /// <summary>Id of the owning/parent aggregate.</summary>
+    public string? RelatedEntityId { get; set; }
+
     public TrailType Type { get; set; }
     public DateTime DateTime { get; set; } = DateTime.UtcNow;
 

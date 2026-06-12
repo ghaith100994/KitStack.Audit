@@ -49,6 +49,8 @@ public class AuditWriter : IAuditWriter
         IReadOnlyDictionary<string, object?>? oldValues = null,
         IReadOnlyDictionary<string, object?>? newValues = null,
         string? module = null,
+        string? relatedEntityType = null,
+        string? relatedEntityId = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(entityName);
@@ -58,10 +60,15 @@ public class AuditWriter : IAuditWriter
             TableName = entityName,
             Type = type,
             Module = module,
+            RelatedEntityType = relatedEntityType,
+            RelatedEntityId = relatedEntityId,
         };
 
         if (entityId is not null)
+        {
             trail.KeyValues["Id"] = entityId;
+            trail.EntityId = Convert.ToString(entityId, CultureInfo.InvariantCulture);
+        }
 
         CopyNormalized(oldValues, trail.OldValues);
         CopyNormalized(newValues, trail.NewValues);
@@ -86,6 +93,7 @@ public class AuditWriter : IAuditWriter
         trail.TenantId ??= _context.TenantId;
         trail.CorrelationId ??= _context.CorrelationId;
         trail.IpAddress ??= _context.IpAddress;
+        trail.Source ??= "Manual";
     }
 
     private static void CopyNormalized(

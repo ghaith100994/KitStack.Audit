@@ -23,7 +23,8 @@ KitStack.Audit is a modular .NET library that provides audit-trail abstractions 
 - Manual capture via `IAuditWriter` for changes that bypass EF Core (background jobs, bulk SQL, external calls).
 - Opt-in auditing: gate per entity with `[AuditDefinition]` and an `IAuditableEntityRegistry` (e.g. an "auditable tables" setting).
 - Sensitive-data redaction: `[AuditIgnore]` skips a property entirely, `[AuditMask]` records the change but hides the value; global name-based exclusion/masking via `AuditOptions`.
-- Rich audit context: every trail carries `UserId`, `UserName`, `TenantId`, `CorrelationId`, and `IpAddress` from the `IAuditContextAccessor`.
+- Rich audit context: every trail carries `UserId`, `UserName`, `TenantId`, `CorrelationId`, `IpAddress`, `EntityId`, `SubModule`, and the capture `Source`.
+- Parent attribution: `[AuditParent]` on a child's FK stamps `RelatedEntityType`/`RelatedEntityId` on trails and activities, so changes to child rows (e.g. committee members) also appear on the owning aggregate's profile feed (the committee).
 - Sink implementations:
   - EF Core relational (SQL Server, PostgreSQL, ...)
   - MongoDB
@@ -185,6 +186,55 @@ public class Customer
 
 `Audit:ExcludedProperties` and `Audit:MaskedProperties` apply the same rules by property
 name across every entity — useful for conventions like "always mask `Password`".
+
+### Showing child changes on the parent's profile (parent attribution)
+
+By default a change is recorded against the row that changed. Adding a `CommitteeMember`
+therefore produces a trail/activity for the member — and nothing on the `Committee`,
+so the committee's profile feed misses it. Annotate the child's foreign key with
+`[AuditParent]` to also attribute the change to the owning aggregate:
+
+```csharp
+public class CommitteeMember
+{
+    public Guid Id { get; set; }
+
+    [AuditParent(nameof(Committee))]   // attribute member changes to the committee too
+    public Guid CommitteeId { get; set; }
+
+    public string MemberName { get; set; }
+}
+```
+
+The interceptor stamps `RelatedEntityType = "Committee"` and `RelatedEntityId = <CommitteeId>`
+on the member's trails and narrated activities. The committee profile feed then queries both:
+
+```csharp
+var feed = db.Activities.Where(a =>
+    (a.EntityType == "Committee" && a.EntityId == committeeId) ||
+    (a.RelatedEntityType == "Committee" && a.RelatedEntityId == committeeId));
+```
+
+Both `AuditTrails` and `ActivityEvents` are indexed on `(RelatedEntityType, RelatedEntityId)`
+for exactly this query. Activities can also carry a `RelatedEntityName` (e.g. the committee's
+name) for display. For manual trails, pass `relatedEntityType`/`relatedEntityId` to
+`IAuditWriter.RecordAsync`.
+
+Narrators stay tiny: after a narrator runs, the interceptor auto-fills any unset boilerplate
+on the returned `ActivityEvent` (user, tenant, entity type/id, related entity, action, module,
+sub-module, timestamp) from the captured trail — a narrator only needs to set titles:
+
+```csharp
+public sealed class CommitteeMemberNarrator : AuditNarratorBase<CommitteeMember>
+{
+    public override ActivityEvent? Narrate(AuditNarrationContext ctx)
+        => new()
+        {
+            TitleEn = $"{ctx.GetNewValue<string>("MemberName")} joined the committee",
+            TitleAr = $"انضم {ctx.GetNewValue<string>("MemberName")} إلى اللجنة",
+        };
+}
+```
 
 ### Manual auditing
 

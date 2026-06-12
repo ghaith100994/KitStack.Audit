@@ -9,6 +9,8 @@ public class TestDbContext : DbContext, IAuditableDbContext
 
     public DbSet<Widget> Widgets => Set<Widget>();
     public DbSet<SecureDocument> SecureDocuments => Set<SecureDocument>();
+    public DbSet<Committee> Committees => Set<Committee>();
+    public DbSet<CommitteeMember> CommitteeMembers => Set<CommitteeMember>();
 
     // Settable so a single test can flip auditing off.
     public bool EnableAuditing { get; set; } = true;

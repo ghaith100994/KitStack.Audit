@@ -69,6 +69,25 @@ public class AuditWriterTests
     }
 
     [Fact]
+    public async Task Manual_trails_default_their_source_and_carry_parent_relations()
+    {
+        var committeeId = Guid.NewGuid();
+        await Writer.RecordAsync(
+            "CommitteeMember",
+            TrailType.Create,
+            entityId: Guid.NewGuid(),
+            module: "Governance",
+            relatedEntityType: "Committee",
+            relatedEntityId: committeeId.ToString());
+
+        var trail = Assert.Single(_sink.Trails);
+        Assert.Equal("Manual", trail.Source);
+        Assert.NotNull(trail.EntityId);
+        Assert.Equal("Committee", trail.RelatedEntityType);
+        Assert.Equal(committeeId.ToString(), trail.RelatedEntityId);
+    }
+
+    [Fact]
     public async Task Empty_batch_is_a_no_op()
     {
         await Writer.RecordAsync(Array.Empty<TrailDto>());

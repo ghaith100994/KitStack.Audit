@@ -26,6 +26,8 @@ public interface IAuditWriter
     /// <param name="oldValues">Values before the change (Update/Delete).</param>
     /// <param name="newValues">Values after the change (Create/Update).</param>
     /// <param name="module">Optional logical module; falls back to the configured default.</param>
+    /// <param name="relatedEntityType">Optional owning/parent aggregate name the change is also attributed to.</param>
+    /// <param name="relatedEntityId">Optional owning/parent aggregate id.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     Task RecordAsync(
         string entityName,
@@ -34,5 +36,7 @@ public interface IAuditWriter
         IReadOnlyDictionary<string, object?>? oldValues = null,
         IReadOnlyDictionary<string, object?>? newValues = null,
         string? module = null,
+        string? relatedEntityType = null,
+        string? relatedEntityId = null,
         CancellationToken cancellationToken = default);
 }

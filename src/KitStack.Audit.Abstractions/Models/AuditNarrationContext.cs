@@ -16,6 +16,22 @@ public sealed class AuditNarrationContext
     public string? TenantId { get; init; }
     public string? CorrelationId { get; init; }
     public string? Module { get; init; }
+
+    /// <summary>Sub-module / feature area from <c>[AuditDefinition]</c>.</summary>
+    public string? SubModule { get; init; }
+
+    /// <summary>English display name from <c>[AuditDefinition]</c> (e.g. "Committee member").</summary>
+    public string? EntityDisplayEn { get; init; }
+
+    /// <summary>Arabic display name from <c>[AuditDefinition]</c>.</summary>
+    public string? EntityDisplayAr { get; init; }
+
+    /// <summary>Owning/parent aggregate name resolved from <c>[AuditParent]</c>, if any.</summary>
+    public string? RelatedEntityType { get; init; }
+
+    /// <summary>Owning/parent aggregate id resolved from <c>[AuditParent]</c>, if any.</summary>
+    public string? RelatedEntityId { get; init; }
+
     public string? PrimaryKey { get; init; }
     public DateTime Timestamp { get; init; } = DateTime.UtcNow;
 

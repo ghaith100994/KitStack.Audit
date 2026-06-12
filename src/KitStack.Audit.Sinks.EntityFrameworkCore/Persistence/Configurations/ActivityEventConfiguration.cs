@@ -25,6 +25,10 @@ public sealed class ActivityEventConfiguration : IEntityTypeConfiguration<Activi
         builder.Property(x => x.EntityType).HasMaxLength(256);
         builder.Property(x => x.EntityId).HasMaxLength(128);
         builder.Property(x => x.Module).HasMaxLength(128);
+        builder.Property(x => x.SubModule).HasMaxLength(128);
+        builder.Property(x => x.RelatedEntityType).HasMaxLength(256);
+        builder.Property(x => x.RelatedEntityId).HasMaxLength(128);
+        builder.Property(x => x.RelatedEntityName).HasMaxLength(512);
         builder.Property(x => x.TitleEn).HasMaxLength(512);
         builder.Property(x => x.TitleAr).HasMaxLength(512);
         builder.Property(x => x.SubtitleEn).HasMaxLength(512);
@@ -47,5 +51,7 @@ public sealed class ActivityEventConfiguration : IEntityTypeConfiguration<Activi
 
         builder.HasIndex(x => x.Timestamp);
         builder.HasIndex(x => x.UserId);
+        builder.HasIndex(x => new { x.EntityType, x.EntityId });
+        builder.HasIndex(x => new { x.RelatedEntityType, x.RelatedEntityId });
     }
 }

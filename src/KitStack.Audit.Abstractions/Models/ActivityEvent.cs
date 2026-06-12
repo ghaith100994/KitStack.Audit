@@ -22,6 +22,21 @@ public class ActivityEvent
 
     public string? EntityType { get; set; }
     public string? EntityId { get; set; }
+
+    /// <summary>
+    /// Logical name of the owning/parent aggregate this activity should also appear under.
+    /// Example: a CommitteeMember activity with RelatedEntityType "Committee" shows up on the
+    /// committee's profile feed even though the change happened on the member row.
+    /// Stamped automatically from <c>[AuditParent]</c> when narration runs through the interceptor.
+    /// </summary>
+    public string? RelatedEntityType { get; set; }
+
+    /// <summary>Id of the owning/parent aggregate.</summary>
+    public string? RelatedEntityId { get; set; }
+
+    /// <summary>Optional display name of the related aggregate (e.g. the committee's name).</summary>
+    public string? RelatedEntityName { get; set; }
+
     public TrailType Action { get; set; }
 
     public string? TitleEn { get; set; }
@@ -32,6 +47,10 @@ public class ActivityEvent
     public string? Severity { get; set; }
 
     public string? Module { get; set; }
+
+    /// <summary>Sub-module / feature area from <c>[AuditDefinition]</c>.</summary>
+    public string? SubModule { get; set; }
+
     public DateTime Timestamp { get; set; } = DateTime.UtcNow;
     public IDictionary<string, string>? Metadata { get; set; }
 }
