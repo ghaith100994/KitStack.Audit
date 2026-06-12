@@ -126,6 +126,9 @@ public sealed class ParentRelationTests : IDisposable
         Assert.Equal(memberId.ToString(), activity.EntityId);
         Assert.Equal(nameof(Committee), activity.RelatedEntityType);
         Assert.Equal(committeeId.ToString(), activity.RelatedEntityId);
+        var relation = Assert.Single(activity.Relations);
+        Assert.Equal(nameof(Committee), relation.EntityType);
+        Assert.Equal(committeeId.ToString(), relation.EntityId);
         Assert.Equal(TrailType.Create, activity.Action);
         Assert.Equal("Committees", activity.SubModule);
         Assert.Equal("test-user", activity.UserName);
@@ -146,6 +149,53 @@ public sealed class ParentRelationTests : IDisposable
         Assert.Equal(2, feed.Count);
         Assert.Contains(feed, t => t.TableName == nameof(Committee));
         Assert.Contains(feed, t => t.TableName == nameof(CommitteeMember));
+    }
+
+    [Fact]
+    public async Task Entity_with_two_parents_is_attributed_to_both()
+    {
+        var orgId = Guid.NewGuid();
+        var deptId = Guid.NewGuid();
+
+        await using (var scope = _provider.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<TestDbContext>();
+            db.People.Add(new Person { OrganizationId = orgId, DepartmentId = deptId, Name = "Alice" });
+            await db.SaveChangesAsync();
+        }
+
+        var trail = Assert.Single(Store.Trails);
+
+        // Both parents are recorded...
+        Assert.Equal(2, trail.Relations.Count);
+        Assert.Contains(trail.Relations, r => r.EntityType == "Organization" && r.EntityId == orgId.ToString());
+        Assert.Contains(trail.Relations, r => r.EntityType == "Department" && r.EntityId == deptId.ToString());
+
+        // ...and the first [AuditParent] (declaration order) is the primary pair.
+        Assert.Equal("Organization", trail.RelatedEntityType);
+        Assert.Equal(orgId.ToString(), trail.RelatedEntityId);
+    }
+
+    [Fact]
+    public async Task Each_parent_feed_finds_the_change_through_relations()
+    {
+        var orgId = Guid.NewGuid();
+        var deptId = Guid.NewGuid();
+
+        await using (var scope = _provider.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<TestDbContext>();
+            db.People.Add(new Person { OrganizationId = orgId, DepartmentId = deptId, Name = "Alice" });
+            await db.SaveChangesAsync();
+        }
+
+        // The query each profile feed would run.
+        static bool InFeed(TrailDto t, string parentType, Guid parentId)
+            => t.Relations.Any(r => r.EntityType == parentType && r.EntityId == parentId.ToString());
+
+        Assert.Single(Store.Trails, t => InFeed(t, "Organization", orgId));
+        Assert.Single(Store.Trails, t => InFeed(t, "Department", deptId));
+        Assert.DoesNotContain(Store.Trails, t => InFeed(t, "Department", orgId));
     }
 
     public void Dispose()

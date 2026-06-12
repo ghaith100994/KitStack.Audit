@@ -34,6 +34,18 @@ public sealed class AuditTrailConfiguration : IEntityTypeConfiguration<AuditTrai
         builder.Property(x => x.ModifiedProperties);
         builder.Property(x => x.PrimaryKey);
 
+        // All parent aggregates the change is attributed to, in their own indexed table
+        // so profile feeds can query them directly.
+        builder.OwnsMany(x => x.Relations, relation =>
+        {
+            relation.ToTable("AuditTrailRelations");
+            relation.WithOwner().HasForeignKey("AuditTrailId");
+            relation.Property(r => r.EntityType).HasMaxLength(256);
+            relation.Property(r => r.EntityId).HasMaxLength(128);
+            relation.Property(r => r.EntityName).HasMaxLength(512);
+            relation.HasIndex(r => new { r.EntityType, r.EntityId });
+        });
+
         // Common query paths.
         builder.HasIndex(x => x.DateTime);
         builder.HasIndex(x => x.Entity);

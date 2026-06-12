@@ -217,8 +217,34 @@ var feed = db.Activities.Where(a =>
 
 Both `AuditTrails` and `ActivityEvents` are indexed on `(RelatedEntityType, RelatedEntityId)`
 for exactly this query. Activities can also carry a `RelatedEntityName` (e.g. the committee's
-name) for display. For manual trails, pass `relatedEntityType`/`relatedEntityId` to
-`IAuditWriter.RecordAsync`.
+name) for display. For manual trails, pass `relatedEntityType`/`relatedEntityId` (or a
+`relations` list) to `IAuditWriter.RecordAsync`.
+
+An entity can declare **several parents** — e.g. a person belongs to an organization *and*
+a department:
+
+```csharp
+public class Person
+{
+    [AuditParent("Organization")]
+    public Guid OrganizationId { get; set; }
+
+    [AuditParent("Department")]
+    public Guid DepartmentId { get; set; }
+}
+```
+
+All parents are recorded in the `Relations` collection on the trail/activity (persisted by
+the relational sink to dedicated `AuditTrailRelations` / `ActivityEventRelations` tables,
+indexed on `(EntityType, EntityId)`; embedded as sub-documents in Mongo). The first
+`[AuditParent]` in declaration order remains the primary `RelatedEntityType`/`RelatedEntityId`
+pair. Each parent's feed queries the collection:
+
+```csharp
+var departmentFeed = db.Activities.Where(a =>
+    (a.EntityType == "Department" && a.EntityId == departmentId) ||
+    a.Relations.Any(r => r.EntityType == "Department" && r.EntityId == departmentId));
+```
 
 Narrators stay tiny: after a narrator runs, the interceptor auto-fills any unset boilerplate
 on the returned `ActivityEvent` (user, tenant, entity type/id, related entity, action, module,

@@ -36,6 +36,9 @@ public static class TrailDtoExtensions
             Source = dto.Source,
             RelatedEntityType = dto.RelatedEntityType,
             RelatedEntityId = dto.RelatedEntityId,
+            Relations = dto.Relations
+                .Select(r => new AuditRelation(r.EntityType, r.EntityId, r.EntityName))
+                .ToList(),
             DateTime = dto.DateTime,
             PrimaryKey = dto.KeyValues.Count == 0 ? null : Serialize(dto.KeyValues),
             PreviousValues = dto.OldValues.Count == 0 ? null : Serialize(dto.OldValues),

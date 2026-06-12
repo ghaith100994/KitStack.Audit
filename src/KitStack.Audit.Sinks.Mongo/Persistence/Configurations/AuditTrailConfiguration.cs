@@ -17,5 +17,6 @@ public sealed class AuditTrailConfiguration : IEntityTypeConfiguration<AuditTrai
         builder.ToCollection("AuditTrails");
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).HasElementName("_id");
+        builder.OwnsMany(x => x.Relations);
     }
 }

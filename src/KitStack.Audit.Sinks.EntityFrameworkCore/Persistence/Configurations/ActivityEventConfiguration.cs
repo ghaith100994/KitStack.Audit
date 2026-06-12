@@ -49,6 +49,18 @@ public sealed class ActivityEventConfiguration : IEntityTypeConfiguration<Activi
 
         builder.Property(x => x.Metadata).HasConversion(converter, comparer);
 
+        // All parent aggregates the activity is attributed to, in their own indexed table
+        // so profile feeds can query them directly.
+        builder.OwnsMany(x => x.Relations, relation =>
+        {
+            relation.ToTable("ActivityEventRelations");
+            relation.WithOwner().HasForeignKey("ActivityEventId");
+            relation.Property(r => r.EntityType).HasMaxLength(256);
+            relation.Property(r => r.EntityId).HasMaxLength(128);
+            relation.Property(r => r.EntityName).HasMaxLength(512);
+            relation.HasIndex(r => new { r.EntityType, r.EntityId });
+        });
+
         builder.HasIndex(x => x.Timestamp);
         builder.HasIndex(x => x.UserId);
         builder.HasIndex(x => new { x.EntityType, x.EntityId });

@@ -51,6 +51,7 @@ public class AuditWriter : IAuditWriter
         string? module = null,
         string? relatedEntityType = null,
         string? relatedEntityId = null,
+        IReadOnlyList<AuditRelation>? relations = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(entityName);
@@ -63,6 +64,9 @@ public class AuditWriter : IAuditWriter
             RelatedEntityType = relatedEntityType,
             RelatedEntityId = relatedEntityId,
         };
+
+        if (relations is not null)
+            trail.Relations.AddRange(relations);
 
         if (entityId is not null)
         {
@@ -94,6 +98,20 @@ public class AuditWriter : IAuditWriter
         trail.CorrelationId ??= _context.CorrelationId;
         trail.IpAddress ??= _context.IpAddress;
         trail.Source ??= "Manual";
+
+        // Keep the primary pair and the relations list consistent whichever the caller set.
+        if (trail.RelatedEntityType is not null
+            && !trail.Relations.Any(r =>
+                r.EntityType == trail.RelatedEntityType && r.EntityId == trail.RelatedEntityId))
+        {
+            trail.Relations.Insert(0, new AuditRelation(trail.RelatedEntityType, trail.RelatedEntityId));
+        }
+
+        if (trail.RelatedEntityType is null && trail.Relations.Count > 0)
+        {
+            trail.RelatedEntityType = trail.Relations[0].EntityType;
+            trail.RelatedEntityId = trail.Relations[0].EntityId;
+        }
     }
 
     private static void CopyNormalized(

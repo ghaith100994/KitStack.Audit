@@ -20,6 +20,7 @@ public sealed class ActivityEventConfiguration : IEntityTypeConfiguration<Activi
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).HasElementName("_id");
         builder.Property(x => x.Action).HasConversion<string>();
+        builder.OwnsMany(x => x.Relations);
 
         var converter = new ValueConverter<IDictionary<string, string>?, string?>(
             v => v == null ? null : JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),

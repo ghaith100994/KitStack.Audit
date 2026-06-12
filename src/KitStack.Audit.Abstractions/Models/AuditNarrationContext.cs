@@ -26,11 +26,14 @@ public sealed class AuditNarrationContext
     /// <summary>Arabic display name from <c>[AuditDefinition]</c>.</summary>
     public string? EntityDisplayAr { get; init; }
 
-    /// <summary>Owning/parent aggregate name resolved from <c>[AuditParent]</c>, if any.</summary>
+    /// <summary>Primary owning/parent aggregate name resolved from <c>[AuditParent]</c>, if any.</summary>
     public string? RelatedEntityType { get; init; }
 
-    /// <summary>Owning/parent aggregate id resolved from <c>[AuditParent]</c>, if any.</summary>
+    /// <summary>Primary owning/parent aggregate id resolved from <c>[AuditParent]</c>, if any.</summary>
     public string? RelatedEntityId { get; init; }
+
+    /// <summary>Every parent aggregate the change is attributed to (multi-parent entities).</summary>
+    public IReadOnlyList<AuditRelation> Relations { get; init; } = Array.Empty<AuditRelation>();
 
     public string? PrimaryKey { get; init; }
     public DateTime Timestamp { get; init; } = DateTime.UtcNow;

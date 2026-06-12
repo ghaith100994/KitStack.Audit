@@ -24,18 +24,26 @@ public class ActivityEvent
     public string? EntityId { get; set; }
 
     /// <summary>
-    /// Logical name of the owning/parent aggregate this activity should also appear under.
-    /// Example: a CommitteeMember activity with RelatedEntityType "Committee" shows up on the
-    /// committee's profile feed even though the change happened on the member row.
-    /// Stamped automatically from <c>[AuditParent]</c> when narration runs through the interceptor.
+    /// Logical name of the *primary* owning/parent aggregate this activity should also appear
+    /// under. Example: a CommitteeMember activity with RelatedEntityType "Committee" shows up
+    /// on the committee's profile feed even though the change happened on the member row.
+    /// Stamped automatically from <c>[AuditParent]</c> when narration runs through the
+    /// interceptor; all parents are listed in <see cref="Relations"/>.
     /// </summary>
     public string? RelatedEntityType { get; set; }
 
-    /// <summary>Id of the owning/parent aggregate.</summary>
+    /// <summary>Id of the primary owning/parent aggregate.</summary>
     public string? RelatedEntityId { get; set; }
 
-    /// <summary>Optional display name of the related aggregate (e.g. the committee's name).</summary>
+    /// <summary>Optional display name of the primary related aggregate (e.g. the committee's name).</summary>
     public string? RelatedEntityName { get; set; }
+
+    /// <summary>
+    /// Every aggregate this activity is attributed to (e.g. a Person's Organization *and*
+    /// Department), so each parent's feed can show it. Stored in its own indexed table by
+    /// the relational sink.
+    /// </summary>
+    public List<AuditRelation> Relations { get; set; } = new();
 
     public TrailType Action { get; set; }
 

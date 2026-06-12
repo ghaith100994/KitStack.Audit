@@ -38,13 +38,20 @@ public sealed class TrailDto
     public string? Source { get; set; }
 
     /// <summary>
-    /// Logical name of the owning/parent aggregate this change is also attributed to
-    /// (see <c>[AuditParent]</c>), e.g. "Committee" for a CommitteeMember change.
+    /// Logical name of the *primary* owning/parent aggregate this change is also attributed to
+    /// (the first <c>[AuditParent]</c>), e.g. "Committee" for a CommitteeMember change.
+    /// All parents — including this one — are listed in <see cref="Relations"/>.
     /// </summary>
     public string? RelatedEntityType { get; set; }
 
-    /// <summary>Id of the owning/parent aggregate.</summary>
+    /// <summary>Id of the primary owning/parent aggregate.</summary>
     public string? RelatedEntityId { get; set; }
+
+    /// <summary>
+    /// Every aggregate this change is attributed to (e.g. a Person's Organization *and*
+    /// Department). Populated from all <c>[AuditParent]</c>-annotated foreign keys.
+    /// </summary>
+    public List<AuditRelation> Relations { get; } = new();
 
     public TrailType Type { get; set; }
     public DateTime DateTime { get; set; } = DateTime.UtcNow;

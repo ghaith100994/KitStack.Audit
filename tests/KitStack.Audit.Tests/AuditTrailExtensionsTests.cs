@@ -51,7 +51,11 @@ public class AuditTrailExtensionsTests
             TenantId = "tenant-1",
             CorrelationId = "corr-1",
             IpAddress = "10.0.0.1",
+            RelatedEntityType = "Organization",
+            RelatedEntityId = "org-1",
         };
+        dto.Relations.Add(new AuditRelation("Organization", "org-1"));
+        dto.Relations.Add(new AuditRelation("Department", "dept-1", "Engineering"));
 
         var trail = dto.ToAuditTrail();
 
@@ -59,5 +63,8 @@ public class AuditTrailExtensionsTests
         Assert.Equal("tenant-1", trail.TenantId);
         Assert.Equal("corr-1", trail.CorrelationId);
         Assert.Equal("10.0.0.1", trail.IpAddress);
+        Assert.Equal("Organization", trail.RelatedEntityType);
+        Assert.Equal(2, trail.Relations.Count);
+        Assert.Contains(trail.Relations, r => r.EntityType == "Department" && r.EntityName == "Engineering");
     }
 }

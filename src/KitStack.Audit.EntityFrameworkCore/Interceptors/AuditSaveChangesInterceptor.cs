@@ -35,8 +35,9 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
     // Per-entity-type redaction map derived from [AuditIgnore]/[AuditMask] attributes.
     private static readonly ConcurrentDictionary<Type, Dictionary<string, PropertyRedaction>> RedactionCache = new();
 
-    // Per-entity-type map of FK property name -> parent entity name, from [AuditParent].
-    private static readonly ConcurrentDictionary<Type, Dictionary<string, string>> ParentCache = new();
+    // Per-entity-type, declaration-ordered list of (FK property, parent entity name) pairs
+    // from [AuditParent]. The first pair becomes the primary RelatedEntityType/Id.
+    private static readonly ConcurrentDictionary<Type, List<ParentLink>> ParentCache = new();
 
     private readonly IAuditContextAccessor _user;
     private readonly IAuditSink _sink;
@@ -172,6 +173,9 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
 
             var redactions = RedactionCache.GetOrAdd(entityType, BuildRedactionMap);
             var parents = ParentCache.GetOrAdd(entityType, BuildParentMap);
+            var parentIds = parents.Count == 0
+                ? null
+                : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var property in entry.Properties)
             {
@@ -186,16 +190,13 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
                     continue;
                 }
 
-                if (parents.TryGetValue(name, out var parentType))
+                if (parentIds is not null && parents.Any(p => p.PropertyName.Equals(name, StringComparison.OrdinalIgnoreCase)))
                 {
                     var parentId = entry.State == EntityState.Deleted
                         ? property.OriginalValue
                         : property.CurrentValue;
                     if (parentId is not null)
-                    {
-                        trail.RelatedEntityType = parentType;
-                        trail.RelatedEntityId = Convert.ToString(parentId, culture);
-                    }
+                        parentIds[name] = Convert.ToString(parentId, culture)!;
                 }
 
                 var redaction = ResolveRedaction(redactions, name);
@@ -244,6 +245,23 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
             trail.EntityId = trail.KeyValues.Count == 0
                 ? null
                 : string.Join(",", trail.KeyValues.Values.Select(v => Convert.ToString(v, culture)));
+
+            // Attribute the change to every [AuditParent] aggregate, in declaration order;
+            // the first becomes the primary RelatedEntityType/Id pair.
+            if (parentIds is { Count: > 0 })
+            {
+                foreach (var parent in parents)
+                {
+                    if (parentIds.TryGetValue(parent.PropertyName, out var parentId))
+                        trail.Relations.Add(new AuditRelation(parent.ParentEntityType, parentId));
+                }
+
+                if (trail.Relations.Count > 0)
+                {
+                    trail.RelatedEntityType = trail.Relations[0].EntityType;
+                    trail.RelatedEntityId = trail.Relations[0].EntityId;
+                }
+            }
 
             captured.Add(new PendingTrail(trail, definition?.Resource, entityType, definition?.DisplayEn, definition?.DisplayAr));
         }
@@ -340,6 +358,7 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
             EntityDisplayAr = pending.DisplayAr,
             RelatedEntityType = trail.RelatedEntityType,
             RelatedEntityId = trail.RelatedEntityId,
+            Relations = trail.Relations,
             PrimaryKey = trail.EntityId ?? (trail.KeyValues.Count == 0 ? null : string.Join(",", trail.KeyValues.Values)),
             OldValues = trail.OldValues,
             NewValues = trail.NewValues,
@@ -399,6 +418,10 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
         activity.EntityId ??= trail.EntityId;
         activity.RelatedEntityType ??= trail.RelatedEntityType;
         activity.RelatedEntityId ??= trail.RelatedEntityId;
+        if (activity.Relations.Count == 0 && trail.Relations.Count > 0)
+            activity.Relations = trail.Relations
+                .Select(r => new AuditRelation(r.EntityType, r.EntityId, r.EntityName))
+                .ToList();
         activity.Module ??= trail.Module;
         activity.SubModule ??= trail.SubModule;
         if (activity.Action == TrailType.None)
@@ -428,17 +451,17 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
         return map;
     }
 
-    private static Dictionary<string, string> BuildParentMap(Type entityType)
+    private static List<ParentLink> BuildParentMap(Type entityType)
     {
-        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var links = new List<ParentLink>();
 
         foreach (var property in entityType.GetProperties(BindingFlags.Public | BindingFlags.Instance))
         {
             if (property.GetCustomAttribute<AuditParentAttribute>(inherit: true) is { } parent)
-                map[property.Name] = parent.ParentEntityType;
+                links.Add(new ParentLink(property.Name, parent.ParentEntityType));
         }
 
-        return map;
+        return links;
     }
 
     private PropertyRedaction ResolveRedaction(Dictionary<string, PropertyRedaction> attributeMap, string propertyName)
@@ -466,6 +489,8 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
     {
         public static PropertyRedaction None { get; } = new(RedactionKind.None, null);
     }
+
+    private sealed record ParentLink(string PropertyName, string ParentEntityType);
 
     private sealed record PendingTrail(
         TrailDto Trail, string? Resource, Type EntityType, string? DisplayEn, string? DisplayAr);

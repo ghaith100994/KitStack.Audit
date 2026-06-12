@@ -17,7 +17,13 @@ namespace KitStack.Audit.Abstractions.Attributes;
 /// }
 /// </code>
 /// Feeds then query: <c>EntityType == "Committee" &amp;&amp; EntityId == id</c> OR
-/// <c>RelatedEntityType == "Committee" &amp;&amp; RelatedEntityId == id</c>.
+/// <c>Relations.Any(r =&gt; r.EntityType == "Committee" &amp;&amp; r.EntityId == id)</c>.
+/// <para>
+/// An entity may declare several parents — e.g. a Person annotating both its
+/// OrganizationId and DepartmentId — and the change is attributed to all of them via
+/// the <c>Relations</c> collection. The first annotated property (declaration order)
+/// becomes the primary <c>RelatedEntityType</c>/<c>RelatedEntityId</c> pair.
+/// </para>
 /// </summary>
 [AttributeUsage(AttributeTargets.Property, AllowMultiple = false, Inherited = true)]
 public sealed class AuditParentAttribute : Attribute
