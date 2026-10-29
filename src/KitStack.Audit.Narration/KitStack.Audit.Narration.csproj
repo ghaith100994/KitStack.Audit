@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>KitStack.Audit.Narration</PackageId>
+    <Authors>ghaith100994</Authors>
+    <Company>KitStack</Company>
+
+    <Description>Bilingual narration toolkit for KitStack.Audit: a narrator base class with value readers, enum labels, soft-delete/restore detection and standard created/updated/removed/restored/activated templates.</Description>
+    <PackageTags>kitstack audit audit-trail narration activity-feed bilingual localization</PackageTags>
+    <RepositoryUrl>https://github.com/ghaith100994/KitStack.Audit</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/ghaith100994/KitStack.Audit</PackageProjectUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\KitStack.Audit.Abstractions\KitStack.Audit.Abstractions.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </ItemGroup>
+
+</Project>

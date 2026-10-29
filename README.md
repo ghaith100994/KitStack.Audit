@@ -19,6 +19,7 @@ KitStack.Audit is a modular .NET library that provides audit-trail abstractions 
 
 - `IAuditSink` abstraction — write a batch of audit trails to any backend.
 - `IAuditNarrator` / `IActivityNarrationDispatcher` — turn raw entity changes into human-readable activity events.
+- Optional bilingual narration toolkit (`KitStack.Audit.Narration`): `NarratorBase<T>` with value readers, enum labels, soft-delete/restore detection and standard created/updated/removed/restored/activated templates.
 - EF Core `SaveChanges` interceptor that snapshots Added/Modified/Deleted aggregates and forwards them to the active sink.
 - Manual capture via `IAuditWriter` for changes that bypass EF Core (background jobs, bulk SQL, external calls).
 - Opt-in auditing: gate per entity with `[AuditDefinition]` and an `IAuditableEntityRegistry` (e.g. an "auditable tables" setting).
@@ -84,6 +85,12 @@ dotnet add package KitStack.Audit.Abstractions
 dotnet add package KitStack.Audit.EntityFrameworkCore
 dotnet add package KitStack.Audit.Sinks.EntityFrameworkCore   # or KitStack.Audit.Sinks.Mongo / KitStack.Audit.Sinks.File
 dotnet add package KitStack.Audit.AspNetCore
+```
+
+For bilingual activity narration helpers (optional):
+
+```bash
+dotnet add package KitStack.Audit.Narration
 ```
 
 For tests:
@@ -161,6 +168,20 @@ public sealed class OrderNarrator : AuditNarratorBase<Order>
                 ? $"Order moved to {ctx.GetNewValue<string>(nameof(Order.Status))}"
                 : "Order updated",
         };
+}
+```
+
+For bilingual titles and the usual created/updated/removed/restored events, derive from `NarratorBase<T>` in `KitStack.Audit.Narration` instead (see its [README](src/KitStack.Audit.Narration/README.md)):
+
+```csharp
+builder.Services.AddKitStackAuditNarration()
+                .AddKitStackAuditNarrationToolkit()
+                .AddAuditNarratorsFromAssembly(typeof(OrderNarrator).Assembly);
+
+public sealed class OrderNarrator(INarrationServices s) : NarratorBase<Order>(s)
+{
+    public override ActivityEvent? Narrate(AuditNarrationContext c)
+        => Standard(c, "shopping-cart", new("Order", "طلب"));
 }
 ```
 
@@ -311,6 +332,7 @@ src/
   KitStack.Audit.Sinks.Mongo/              (MongoAuditSink, Bson serializer registration, health check)
   KitStack.Audit.Sinks.File/               (FileAuditSink, rolling JSON-Lines files)
   KitStack.Audit.Fakes/                    (InMemoryAuditSink, IFakeAuditStore)
+  KitStack.Audit.Narration/                (NarratorBase<T>, LocalizedText, IEnumLabelProvider, INarrationPhrases, AddAuditNarratorsFromAssembly)
   KitStack.Audit.AspNetCore/               (AddKitStackAudit, sink selection, manual writer, health-check registration)
   KitStack.Audit.Samples.Web/              (sample web app, DB-backed example)
 tests/
